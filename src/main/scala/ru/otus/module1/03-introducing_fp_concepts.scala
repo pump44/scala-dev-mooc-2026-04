@@ -4,6 +4,7 @@ package ru.otus.module1
 
 import ru.otus.module1.variance.{Animal, Cat}
 
+import scala.annotation.tailrec
 import scala.language.postfixOps
 
 
@@ -164,6 +165,38 @@ object variance {
     def flatMap[B](f: T => Option[B]): Option[B] =
       if (isEmpty) None
       else f(this.asInstanceOf[Some[T]].v)
+
+    /**
+     *
+     * Реализовать метод printIfAny, который будет печатать значение, если оно есть
+     */
+
+    def printIfAny(): Unit = this match {
+      case Some(v) => println(v)
+      case None => ()
+    }
+
+    /**
+     *
+     * Реализовать метод zip, который будет создавать Option от пары значений из 2-х Option
+     */
+
+    def zip[B](second: Option[B]): Option[(T, B)] = (this, second) match {
+      case (Some(v1), Some(v2)) => Option((v1, v2))
+      case (None, _) => None
+      case (_, None) => None
+    }
+
+    /**
+     *
+     * Реализовать метод filter, который будет возвращать не пустой Option
+     * в случае если исходный не пуст и предикат от значения = true
+     */
+
+    def filter(f: T => Boolean): Option[T] = this match {
+      case s @ Some(v) if f(v) => s
+      case _ => None
+    }
   }
 
   object Option {
@@ -174,28 +207,20 @@ object variance {
   case object None extends Option[Nothing]
 
   var animalOpt: Option[Animal] = None
-  var intOpt: Option[Int] = ???
+  var intOpt: Option[Int] = None
 
 
+  @main
+  def runOption(): Unit = {
+    Option(22).printIfAny()
+    None.printIfAny()
 
+    Option(33).filter(_ > 10).printIfAny()
+    Option(33).filter(_ < 10).printIfAny()
 
-  /**
-   *
-   * Реализовать метод printIfAny, который будет печатать значение, если оно есть
-   */
-
-
-  /**
-   *
-   * Реализовать метод zip, который будет создавать Option от пары значений из 2-х Option
-   */
-
-
-  /**
-   *
-   * Реализовать метод filter, который будет возвращать не пустой Option
-   * в случае если исходный не пуст и предикат от значения = true
-   */
+    Option(22).zip(None).printIfAny()
+    Option(22).zip(Option("Hello")).printIfAny()
+  }
 
  }
 
@@ -209,24 +234,152 @@ object variance {
     */
 
 
-    sealed trait List[+T]{
-      def ::[TT >: T](elem: TT): List[TT] = ???
+    sealed trait List[+T] {
+
+     // можно и так, но если отдать реализацю наследникам, обойдемся без pm
+//          def :: [TT >: T](elem: TT): List[TT] = this match {
+//             case list @ ::(head, tail) =>  new ::(elem, list)
+//             case Nil => new ::(elem, Nil)
+//           }
+
+     def ::[TT >: T](elem: TT): List[TT]
+
+     // для флатмапа склейка двух списков
+     def +:+[TT >: T](list: List[TT]): List[TT] = this match {
+       case ::(head, tail) => tail.+:+(head :: list)
+       case Nil => list
+     }
+
+
+     /**
+      *
+      * в репе не было, но на платформе есть такое в заданиях
+      */
+
+     def mkString(sep: String = ","): String = this match {
+       case ::(head, Nil) => head.toString
+       case ::(head, tail) => head.toString + sep +  " " + tail.mkString(sep)
+       case Nil => ""
+     }
+
+     /**
+      *
+      * в репе не было, но на платформе есть такое в заданиях
+      */
+
+     def flatMap[B](f: T => List[B]): List[B] = this match {
+       case ::(head, tail) => f(head) +:+ tail.flatMap(f)
+       case Nil => Nil
+     }
+     /**
+      *
+      * Реализовать метод map для списка который будет применять некую ф-цию к элементам данного списка
+      */
+
+     def map[B](f: T => B): List[B] = this match {
+       case ::(head, tail) => new ::(f(head), tail.map(f))
+       case Nil => Nil
+     }
+
+     def mapByFlatMap[B](f: T => B): List[B] = this.flatMap(f(_) :: Nil)
+
+     /**
+      *
+      * Реализовать метод reverse который позволит заменить порядок элементов в списке на противоположный
+      */
+
+     def reverse(): List[T] = {
+       @tailrec
+       def loop(list: List[T], acc: List[T]): List[T] = {
+         list match {
+           case Nil => acc
+           case ::(head, tail) =>
+             loop(tail, head :: acc)
+         }
+       }
+
+       loop(this, Nil)
+     }
+
+     /**
+      *
+      * Реализовать метод filter для списка который будет фильтровать список по некому условию
+      */
+
+     // кажется реализация через рекурсию потребует реверс применить
+     def filter(f: T => Boolean): List[T] = this match {
+       case ::(head, tail) if f(head) => head :: tail.filter(f)
+       case ::(head, tail) => tail.filter(f)
+       case _ => Nil
+     }
+
+   }
+
+
+    case class ::[A](head: A, tail: List[A]) extends List[A] {
+      override def ::[TT >: A](elem: TT): List[TT] = new ::(elem, this)
     }
 
-
-    case class ::[A](head: A, tail: List[A]) extends List[A]
-    case object Nil extends List[Nothing]
+    case object Nil extends List[Nothing] {
+      override def ::[TT >: Nothing](elem: TT): List[TT] = new ::(elem, Nil)
+    }
 
     object List {
       def apply[A](v: A*): List[A] =
         if(v.isEmpty) Nil else ::(v.head, apply(v.tail:_*))
+
+      /**
+       *
+       * Написать функцию incList которая будет принимать список Int и возвращать список,
+       * где каждый элемент будет увеличен на 1
+       */
+
+      def incList(list: List[Int]): List[Int] = list.map(_ + 1)
+
+      /**
+       *
+       * Написать функцию shoutString которая будет принимать список String и возвращать список,
+       * где к каждому элементу будет добавлен префикс в виде '!'
+       */
+
+      def shoutString(list: List[String]): List[String] = list.map(s => s"!$s")
+    }
+
+
+    @main
+    def runList(): Unit = {
+      val list1: List[Int] = List(1, 1)
+      val list2: List[Int] = 4 :: 3 :: list1
+      val empty: List[Int] = Nil
+
+      println(list2.map(_ + 4))
+      println(empty.map(_ + 4))
+
+      println("mapByFlatMap")
+      println(list2.mapByFlatMap(_ + 4))
+      println(empty.mapByFlatMap(_ + 4))
+
+      println("flatMap")
+      println(list2.flatMap(el =>  (el + 4) :: Nil))
+      println(empty.flatMap(el => (el + 4) :: Nil))
+
+      println(list2)
+      println(list2.reverse())
+      println(empty.reverse())
+
+      println(list2.filter(_ % 2 > 0))
+      println(empty.filter(_ % 2 > 0))
+
+      println(List.incList(list2))
+
+      println(List.shoutString("foo" :: "bar" :: "foobar" :: Nil).mkString(" -"))
     }
 
 
 
 
 
-
+    //сделали на занятии
     /**
       * Конструктор, позволяющий создать список из N - го числа аргументов
       * Для этого можно воспользоваться *
@@ -235,33 +388,6 @@ object variance {
       * def printArgs(args: Int*) = args.foreach(println(_))
       */
 
-    /**
-      *
-      * Реализовать метод reverse который позволит заменить порядок элементов в списке на противоположный
-      */
 
-    /**
-      *
-      * Реализовать метод map для списка который будет применять некую ф-цию к элементам данного списка
-      */
-
-
-    /**
-      *
-      * Реализовать метод filter для списка который будет фильтровать список по некому условию
-      */
-
-    /**
-      *
-      * Написать функцию incList которая будет принимать список Int и возвращать список,
-      * где каждый элемент будет увеличен на 1
-      */
-
-
-    /**
-      *
-      * Написать функцию shoutString которая будет принимать список String и возвращать список,
-      * где к каждому элементу будет добавлен префикс в виде '!'
-      */
 
  }
