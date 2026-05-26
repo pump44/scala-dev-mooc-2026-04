@@ -10,6 +10,8 @@ class CheckCollectionsTask extends AnyFlatSpec {
       "SIT", "AMET"))
     assert(capitalizeIgnoringASCII(List("Оказывается", ",", "ЗвУк", "КЛАВИШЬ")) === List("Оказывается", ",",
       "звук", "клавишь"))
+    assert(capitalizeIgnoringASCII(List[String]()) === Nil)
+    assert(capitalizeIgnoringASCII(List[String]("Первый")) === List("Первый"))
   }
 
   "check numbersToNumericString" should "ok" in {
