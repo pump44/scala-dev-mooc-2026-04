@@ -1,54 +1,49 @@
 package ru.otus.module1
 
-import ru.otus.module1.collections.ListLike
-import ru.otus.module1.collections2.ToyList
+import ru.otus.module1.concurrency.{MyThread, getRatesLocation1, getRatesLocation2, printRunningTime}
+
+import scala.util.{Failure, Success}
 
 
 object App {
   def main(args: Array[String]): Unit = {
-    println("Hello world")
-    
-    val l1 = ToyList(1, 2, 3)
-    val l2 = ToyList(4, 5, 6)
+    println(s"Hello world from: " +
+      s"${Thread.currentThread().getName}")
 
-    val ll1 = List(1, 2, 3)
-    val ll2 = List(4, 5, 6)
+//    val t1 = new Thread {
+//      override def run(): Unit = {
+//        Thread.sleep(1000)
+//        println(s"Hello from ${Thread.currentThread().getName}")
+//      }
+//    }
+//    val t2 = new MyThread
+//    t1.start()
+//    t1.join()
+//    t2.start()
 
-    val l3 = for{
-      e1 <- l1
-      e2 <- l2
-    } yield e1 + e2
+    def action = {
+      val f1 = getRatesLocation1
+      val f2 = getRatesLocation2
 
-    val ll3 = for {
-      e1 <- ll1
-      e2 <- ll2
-    } yield e1 + e2
+      val r2: concurrency.ToyFuture[Int] = for{
+        i1 <- f1
+        i2 <- f2
+      } yield i1 + i2
 
-    val _l3 = l1.flatMap(_ => l2)
+      r2.onComplete(println)
 
-   val ll = LazyList(1, 2, 3)
-
-    println(
-      ll.map{v =>
-      println(s"map: ${v}")
-      v + 1
-    }.filter{v =>
-      println(s"Filter: ${v}")
-      v % 2 == 0
-    }.toList
-    )
-
-    println("For List")
-
-    println(
-      ll1.map { v =>
-        println(s"map: ${v}")
-        v + 1
-      }.filter { v =>
-        println(s"Filter: ${v}")
-        v % 2 == 0
-      }
-    )
-
+//      val r: Unit = f1.onComplete {
+//        case Failure(exception) =>
+//          println(exception.getMessage)
+//        case Success(i1) =>
+//          f2.onComplete {
+//            case Failure(exception) =>
+//              println(exception.getMessage)
+//            case Success(i2) =>
+//              println(s"Result: ${i1 + i2}")
+//          }
+//      }
+    }
+    printRunningTime(action)
   }
 }
