@@ -1,7 +1,9 @@
 package ru.otus.module1
 
-import ru.otus.module1.concurrency.{MyThread, getRatesLocation1, getRatesLocation2, printRunningTime}
+import ru.otus.module1.concurrency.{MyThread, ToyFuture, future, getRatesLocation1, getRatesLocation2, printRunningTime}
 
+import java.util.concurrent.Executors
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 
@@ -10,40 +12,33 @@ object App {
     println(s"Hello world from: " +
       s"${Thread.currentThread().getName}")
 
-//    val t1 = new Thread {
-//      override def run(): Unit = {
-//        Thread.sleep(1000)
-//        println(s"Hello from ${Thread.currentThread().getName}")
-//      }
-//    }
-//    val t2 = new MyThread
-//    t1.start()
-//    t1.join()
-//    t2.start()
+    given ExecutionContext = future.ec
 
-    def action = {
-      val f1 = getRatesLocation1
-      val f2 = getRatesLocation2
+    val f1 = ToyFuture {
+      Thread.sleep(1000)
+      println("Future 1")
+      10
+    }(executors.pool1)
 
-      val r2: concurrency.ToyFuture[Int] = for{
-        i1 <- f1
-        i2 <- f2
-      } yield i1 + i2
+    val f2 = ToyFuture {
+      Thread.sleep(1000)
+      println("Future 2")
+      20
+    }(executors.pool1)
 
-      r2.onComplete(println)
-
-//      val r: Unit = f1.onComplete {
-//        case Failure(exception) =>
-//          println(exception.getMessage)
-//        case Success(i1) =>
-//          f2.onComplete {
-//            case Failure(exception) =>
-//              println(exception.getMessage)
-//            case Success(i2) =>
-//              println(s"Result: ${i1 + i2}")
-//          }
-//      }
+    val f3 = f1.flatMap{v =>
+      f2.map{ v2 =>
+        v + v2
+      }
     }
-    printRunningTime(action)
+
+    f3.onComplete(println)
+
+//    val r3 = for{
+//      v1 <- future.getRatesLocation1
+//      v2 <- future.getRatesLocation2
+//    } yield v1 + v2
+//
+//    future.printRunningTime(r3).foreach(println)
   }
 }
