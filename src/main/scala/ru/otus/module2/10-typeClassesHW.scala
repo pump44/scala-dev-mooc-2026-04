@@ -1,53 +1,56 @@
 package ru.otus.module2
 
 import ru.otus.module2.type_classes_hw.JsValue.{JsNull, JsNumber, JsObject, JsString}
-import ru.otus.module2.type_classes_hw.{JsValue, JsonWriter}
-import ru.otus.module2.type_classes_hw.JsonWriter.given
-
+import ru.otus.module2.type_classes_hw.JsonWriter.JsonWriterImpl
 
 object type_classes_hw {
 
-  // убрали скобки, вынесли toJson вне объекта потому что можем
-  // выкинуть object type_classes_hw скорее всего тоже можем, но будут конфликты при импорте
-  //в остальном вроде все вписывается вписывается в scala 3
 
-  // меняем силд иерхию на enum
-  enum JsValue:
-    case JsObject(get: Map[String, JsValue])
-    case JsString(get: String)
-    case JsNumber(get: Double)
-    case JsNull
+  // вернемся на scala 2
+  // силд  ок
+  sealed trait JsValue
 
-    override def toString: String = this match {
-      case JsValue.JsObject(get) => get.mkString("{\n", ", \n", "\n}")
-      case JsValue.JsString(get) => s""""$get""""
-      case JsValue.JsNumber(get) => s"$get"
-      case JsValue.JsNull => "null"
+  object JsValue {
+    final case class JsObject(get: Map[String, JsValue]) extends JsValue  {
+      override def toString: String = this.get.mkString("{\n", ", \n", "\n}")
     }
-  
-  trait JsonWriter[T]:
+
+    final case class JsString(get: String) extends JsValue {
+      override def toString: String = s""""${this.get}""""
+    }
+
+
+    final case class JsNumber(get: Double) extends JsValue {
+      override def toString: String = s"""${this.get}"""
+    }
+
+    case object JsNull extends JsValue {
+        override def toString: String = """null"""
+    }
+  }
+
+  // 1
+
+  trait JsonWriter[T] {
     def toJson(v: T): JsValue
-
-    // по сути одно и тоже, просто по мне object.toJson красивее toJson(object)
-    extension (v: T) def toJsonIm: JsValue
-
+  }
   
-  object JsonWriter:
+  object JsonWriter {
     
-    def apply[T](using ev: JsonWriter[T]) = ev
+    def apply[T](implicit ev: JsonWriter[T]) = ev
     
     def from[T](f: T => JsValue): JsonWriter[T] = new JsonWriter[T] {
         override def toJson(v: T): JsValue = f(v)
-
-        extension (v: T) override def toJsonIm: JsValue = f(v)
     }
-    
-    given JsonWriter[String] = from[String](JsString)
 
-    given JsonWriter[Int] = from[Int](JsNumber)
+    // меняем все на имплиситы
+    
+    implicit val JsStringImpl: JsonWriter[String] = from[String](JsString)
+
+    implicit val JsIntImpl:  JsonWriter[Int] = from[Int](JsNumber)
 
     // жуткий костыль, чтобы в мапе могли быть разные значения, ну естественно для которых есть JsonWriter
-    given JsonWriter[Any] = from[Any] {
+    implicit val JsAnyImpl: JsonWriter[Any] = from[Any] {
       case s: String => JsString(s)
       case n: Int => JsNumber(n)
       case opt: Option[Any] => toJson(opt)
@@ -55,16 +58,31 @@ object type_classes_hw {
     }
 
 
-    given optJson [T](using jw: JsonWriter[T]): JsonWriter[Option[T]] = from[Option[T]] {
+    implicit def  optJson [T](implicit jw: JsonWriter[T]): JsonWriter[Option[T]] = from[Option[T]] {
       case Some(value) => jw.toJson(value)
       case None => JsNull
     }
 
-    given [T]: JsonWriter[Map[String, T]] =  from[Map[String, T]](
+    implicit def JsObjImpl[T](implicit  jw: JsonWriter[T]): JsonWriter[Map[String, T]] =  from[Map[String, T]](
       m => JsObject(
-        m.map {(k, v) => (k -> v.toJsonIm)}
+        m.map {(k, v) => (k -> toJson(v))}
       )
     )
+
+    // вот функции вида object.toJson видимо адо будет под каждый тип написать
+    implicit class JsonWriterImpl(v: String) {
+      def toJsonIm: JsValue = JsString(v)
+    }
+
+  }
+
+
+  // T: JsonWriter кажется нормальная конструкция для scala 2, вроде такое было
+  // ну или надо на имплиситли переписать
+  // но у нас есть апплай с имплиситом
+  def toJson[T: JsonWriter](v: T): JsValue = JsonWriter[T].toJson(v)
+
+
 
   @main
   def hw10(): Unit = {
@@ -82,8 +100,6 @@ object type_classes_hw {
   }
 }
 
-// может существовать без пакеджа и не завернут в другую структуру
-def toJson[T: JsonWriter](v: T): JsValue = JsonWriter[T].toJson(v)
 
 
 
