@@ -1,7 +1,9 @@
 package ru.otus.module3.cats.catsconcurrencyhomework
 
-import cats.effect.{IO, IOApp}
-import cats.implicits._
+import cats.effect.{IO, IOApp, Sync, Temporal}
+import cats.implicits.*
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.Duration
 
 // Поиграемся с кошельками на файлах и файберами.
 
@@ -18,13 +20,35 @@ import cats.implicits._
 // def loop(): IO[Unit] = IO.println("hello").flatMap(_ => loop())
 object WalletFibersApp extends IOApp.Simple {
 
+
+  // правильно ли от Temporal ? или надо выбрать другой интерфейс
+  extension [F[_]: Temporal] (wallet: Wallet[F]) {
+    def topupLoop(interval: Duration): F[Nothing] =
+      wallet.topup(100) >> Temporal[F].sleep(interval) >> topupLoop(interval)
+  }
+
+  private def show(wallets: Wallet[IO]*): IO[Unit] =
+    wallets.traverse(_.balance)
+      .flatMap(values => IO.println(s"${values.mkString(", ")}")) >>
+      IO.sleep(1.seconds)
+      >> show(wallets: _*)
+
+
   def run: IO[Unit] =
     for {
       _ <- IO.println("Press any key to stop...")
       wallet1 <- Wallet.fileWallet[IO]("1")
       wallet2 <- Wallet.fileWallet[IO]("2")
       wallet3 <- Wallet.fileWallet[IO]("3")
-      // todo: запустить все файберы и ждать ввода от пользователя чтобы завершить работу
+      f1 <- wallet1.topupLoop(100.millis).start
+      f2 <- wallet2.topupLoop(500.millis).start
+      f3 <- wallet3.topupLoop(2000.millis).start
+      bal <- show(wallet1, wallet2, wallet3).start
+      _ <- IO.readLine
+      _ <- f1.cancel
+      _ <- f2.cancel
+      _ <- f3.cancel
+      _ <- bal.cancel
     } yield ()
 
 }
