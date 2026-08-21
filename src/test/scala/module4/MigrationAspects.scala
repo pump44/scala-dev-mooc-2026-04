@@ -26,7 +26,7 @@ object LiquibaseService {
     classLoaderAccessor <- ZIO.attempt(new ClassLoaderResourceAccessor(classLoader))
     fileOpener <- ZIO.attempt(new CompositeResourceAccessor(fileAccessor, classLoaderAccessor))
     jdbcConn <- ZIO.acquireRelease(ZIO.attempt(new JdbcConnection(ds.getConnection())))(conn => ZIO.succeed(conn.close()))
-    liqui <- ZIO.attempt(new Liquibase("src/test/resources/liquibase/main.xml", fileOpener, jdbcConn))
+    liqui <- ZIO.attempt(new Liquibase("liquibase-test/main.xml", fileOpener, jdbcConn))
   } yield liqui
 
 
