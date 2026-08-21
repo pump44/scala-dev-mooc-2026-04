@@ -43,6 +43,7 @@ object UserRepositorySpec extends ZIOSpecDefault {
   val usersGen = Gen.fromIterable(users)
 
 
+
   def spec = suite("UserRepositorySpec")(
     test("метод list возвращает пустую коллекцию, на пустой базе")(
       for {
@@ -110,7 +111,7 @@ object UserRepositorySpec extends ZIOSpecDefault {
 
     ) @@ migrate(),
 
-  ).provideShared(
+  ).provide( // поменял иначе мы будем в одну базу одни и теже данные пихать и тесты разваляться
     TestContainer.postgres(),
     DBTransactor.test,
     LiquibaseService.liquibaseLayer,
