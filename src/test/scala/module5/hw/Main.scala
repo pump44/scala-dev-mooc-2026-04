@@ -256,3 +256,143 @@ object Calculator:
   println("Event log = история")
   println("Replay = восстановление aggregate state")
   println("CQRS projection/read model появится позже")
+
+// ------------------------------------------------------------
+// 6. Commands and command handler
+// ------------------------------------------------------------
+
+sealed trait Command {
+  def calculationId: String
+}
+
+final case class CreateCalculation(
+                                   calculationId: String,
+                                   initialResult: Double = 0.0
+                                 ) extends Command
+
+final case class PerformCalculation(
+                                     calculationId: String,
+                                     operation: Operation,
+                                     right: Double
+                                   ) extends Command
+
+final case class ResetCalculation(
+                                  calculationId: String
+                                ) extends Command
+
+sealed trait CommandError {
+  def message: String
+}
+
+final case class ValidationError(message: String) extends CommandError
+
+final case class BusinessRuleViolation(message: String) extends CommandError
+
+object CommandHandler {
+
+  private def validateCalculationId(calculationId: String): Either[CommandError, Unit] =
+    if (calculationId.trim.isEmpty)
+      Left(ValidationError("У калькулятора должен быть идентификатор"))
+    else
+      Right(())
+
+  def handle(
+              command: Command,
+              currentState: Option[CalculatorState]
+            ): Either[CommandError, List[CalculatorEvent]] =
+    command match
+      case c: CreateCalculation =>
+        validateCalculationId(c.calculationId).flatMap { _ =>
+          currentState match
+            case Some(state) if state.calculationId == c.calculationId =>
+              Right(Nil)
+            case _ =>
+              Right(List(CalculationCreated(c.calculationId, c.initialResult)))
+        }
+
+      case c: PerformCalculation =>
+        validateCalculationId(c.calculationId).flatMap { _ =>
+          currentState match
+            case Some(state) if state.calculationId != c.calculationId =>
+              Left(ValidationError(s"Калькулятор '${c.calculationId}' не существует"))
+            case Some(_) if c.operation == Operation.Divide && c.right == 0.0 =>
+              Left(BusinessRuleViolation("Деление на ноль"))
+            case Some(_) =>
+              Right(List(CalculationPerformed(c.calculationId, c.operation, c.right)))
+            case None =>
+              Left(ValidationError(s"Калькулятор '${c.calculationId}' не существует"))
+        }
+
+      case c: ResetCalculation =>
+        validateCalculationId(c.calculationId).flatMap { _ =>
+          currentState match
+            case Some(state) if state.calculationId == c.calculationId && state.result == 0 =>
+              Right(Nil)
+            case Some(_) =>
+              Right(List(CalculationCreated(c.calculationId, 0.0)))
+            case None =>
+              Right(Nil)
+        }
+
+}
+
+@main def runCommandExamples(): Unit =
+
+  val emptyState: Option[CalculatorState] = None
+
+  val createdResult =
+    CommandHandler.handle(CreateCalculation("mycalc", 12.5), emptyState)
+
+  val createdState =
+    createdResult.toOption match
+      case Some(events) => Calculator.replay(events.map(e => EventEnvelope(
+        eventId = UUID.randomUUID(),
+        aggregateId = e.calculationId,
+        eventType = e.getClass.getName,
+        version = 1,
+        occurredAt = Instant.now(),
+        correlationId = None,
+        causationId = None,
+        producer = "command-handler",
+        payload = e
+      )))
+      case None => None
+
+  val afterAdd =
+    CommandHandler.handle(PerformCalculation("mycalc", Operation.Add, 5.0), createdState)
+
+
+  val afterReset =
+    CommandHandler.handle(ResetCalculation("mycalc"), afterAdd.toOption.flatMap(events =>
+      Calculator.replay(events.map(e => EventEnvelope(
+        eventId = UUID.randomUUID(),
+        aggregateId = e.calculationId,
+        eventType = e.getClass.getName,
+        version = 1,
+        occurredAt = Instant.now(),
+        correlationId = None,
+        causationId = None,
+        producer = "command-handler",
+        payload = e
+      )))
+    ))
+
+  val invalidDivide =
+    CommandHandler.handle(PerformCalculation("mycalc", Operation.Divide, 0.0), createdState)
+
+  val noOpReset =
+    CommandHandler.handle(ResetCalculation("othercalc"), None)
+
+
+  val badAdd =
+    CommandHandler.handle(PerformCalculation("othercalc", Operation.Add, 5.0), createdState)
+
+  println(s"Создать -> $createdResult")
+  println(s"Сумма -> $afterAdd")
+  println(s"Деление на ноль -> $invalidDivide")
+  println(s"Сбрасываем -> $afterReset")
+  println(s"Сбрасываем левый id -> $noOpReset")
+  println(s"Сумма левый id -> $badAdd")
+
+
+
